@@ -116,6 +116,8 @@ export const getWorkspaceMembersService = async (workspaceId: string) => {
 
 export const getWorkspaceAnalyticsService = async (workspaceId: string) => {
   const currentDate = new Date();
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(currentDate.getDate() - 30);
 
   const totalTasks = await TaskModel.countDocuments({
     workspace: workspaceId,
@@ -132,10 +134,104 @@ export const getWorkspaceAnalyticsService = async (workspaceId: string) => {
     status: TaskStatusEnum.DONE,
   });
 
+  const inProgressTasks = await TaskModel.countDocuments({
+    workspace: workspaceId,
+    status: TaskStatusEnum.IN_PROGRESS,
+  });
+
+  const todoTasks = await TaskModel.countDocuments({
+    workspace: workspaceId,
+    status: TaskStatusEnum.TODO,
+  });
+
+  // Task completion trend over last 30 days
+  const taskCompletionTrend = await TaskModel.aggregate([
+    {
+      $match: {
+        workspace: new mongoose.Types.ObjectId(workspaceId),
+        status: TaskStatusEnum.DONE,
+        updatedAt: { $gte: thirtyDaysAgo }
+      }
+    },
+    {
+      $group: {
+        _id: {
+          $dateToString: { format: "%Y-%m-%d", date: "$updatedAt" }
+        },
+        count: { $sum: 1 }
+      }
+    },
+    {
+      $sort: { "_id": 1 }
+    }
+  ]);
+
+  // Task priority distribution
+  const taskPriorityDistribution = await TaskModel.aggregate([
+    {
+      $match: {
+        workspace: new mongoose.Types.ObjectId(workspaceId)
+      }
+    },
+    {
+      $group: {
+        _id: "$priority",
+        count: { $sum: 1 }
+      }
+    }
+  ]);
+
+  // Project task distribution
+  const projectTaskDistribution = await TaskModel.aggregate([
+    {
+      $match: {
+        workspace: new mongoose.Types.ObjectId(workspaceId)
+      }
+    },
+    {
+      $lookup: {
+        from: "projects",
+        localField: "project",
+        foreignField: "_id",
+        as: "projectInfo"
+      }
+    },
+    {
+      $unwind: "$projectInfo"
+    },
+    {
+      $group: {
+        _id: "$projectInfo.name",
+        count: { $sum: 1 }
+      }
+    },
+    {
+      $sort: { count: -1 }
+    },
+    {
+      $limit: 10
+    }
+  ]);
+
+  const totalProjects = await ProjectModel.countDocuments({
+    workspace: workspaceId,
+  });
+
+  const totalMembers = await MemberModel.countDocuments({
+    workspaceId: workspaceId,
+  });
+
   const analytics = {
     totalTasks,
     overdueTasks,
     completedTasks,
+    inProgressTasks,
+    todoTasks,
+    totalProjects,
+    totalMembers,
+    taskCompletionTrend,
+    taskPriorityDistribution,
+    projectTaskDistribution,
   };
 
   return { analytics };

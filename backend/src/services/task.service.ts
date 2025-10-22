@@ -161,6 +161,10 @@ export const getAllTasksService = async (
     assignedTo?: string[];
     keyword?: string;
     dueDate?: string;
+    createdFrom?: string;
+    createdTo?: string;
+    dueFrom?: string;
+    dueTo?: string;
   },
   pagination: {
     pageSize: number;
@@ -195,6 +199,32 @@ export const getAllTasksService = async (
     query.dueDate = {
       $eq: new Date(filters.dueDate),
     };
+  }
+
+  // Date range filters for created date
+  if (filters.createdFrom || filters.createdTo) {
+    query.createdAt = {};
+    if (filters.createdFrom) {
+      query.createdAt.$gte = new Date(filters.createdFrom);
+    }
+    if (filters.createdTo) {
+      const toDate = new Date(filters.createdTo);
+      toDate.setHours(23, 59, 59, 999); // End of day
+      query.createdAt.$lte = toDate;
+    }
+  }
+
+  // Date range filters for due date
+  if (filters.dueFrom || filters.dueTo) {
+    query.dueDate = {};
+    if (filters.dueFrom) {
+      query.dueDate.$gte = new Date(filters.dueFrom);
+    }
+    if (filters.dueTo) {
+      const toDate = new Date(filters.dueTo);
+      toDate.setHours(23, 59, 59, 999); // End of day
+      query.dueDate.$lte = toDate;
+    }
   }
 
   //Pagination Setup
@@ -270,4 +300,32 @@ export const deleteTaskService = async (
   }
 
   return;
+};
+
+export const bulkDeleteTasksService = async (
+  workspaceId: string,
+  taskIds: string[]
+) => {
+  // Verify all tasks belong to the workspace
+  const tasks = await TaskModel.find({
+    _id: { $in: taskIds },
+    workspace: workspaceId,
+  });
+
+  if (tasks.length !== taskIds.length) {
+    throw new BadRequestException(
+      "Some tasks do not exist or do not belong to this workspace"
+    );
+  }
+
+  // Delete all tasks
+  const result = await TaskModel.deleteMany({
+    _id: { $in: taskIds },
+    workspace: workspaceId,
+  });
+
+  return {
+    deletedCount: result.deletedCount,
+    taskIds,
+  };
 };

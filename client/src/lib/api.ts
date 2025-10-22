@@ -262,6 +262,26 @@ export const deleteTaskMutationFn = async ({
   return response.data;
 };
 
+export const bulkDeleteTasksMutationFn = async ({
+  workspaceId,
+  taskIds,
+}: {
+  workspaceId: string;
+  taskIds: string[];
+}): Promise<{
+  message: string;
+  deletedCount: number;
+  taskIds: string[];
+}> => {
+  const response = await API.delete(
+    `task/workspace/${workspaceId}/bulk-delete`,
+    {
+      data: { taskIds }
+    }
+  );
+  return response.data;
+};
+
 //********* COMMENTS ****************
 //************* */
 

@@ -44,6 +44,8 @@ interface DataTableProps<TData, TValue> {
   pagination?: PaginationProps;
   onPageChange?: (page: number) => void;
   onPageSizeChange?: (size: number) => void;
+  rowSelection?: {};
+  onRowSelectionChange?: (selection: {}) => void;
   meta?: any;
 }
 
@@ -55,6 +57,8 @@ export function DataTable<TData, TValue>({
   pagination,
   onPageChange,
   onPageSizeChange,
+  rowSelection: externalRowSelection,
+  onRowSelectionChange,
   meta,
 }: DataTableProps<TData, TValue>) {
   const { totalCount = 0, pageNumber = 1, pageSize = 10 } = pagination || {};
@@ -65,7 +69,9 @@ export function DataTable<TData, TValue>({
   );
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>({});
-  const [rowSelection, setRowSelection] = React.useState({});
+  const [internalRowSelection, setInternalRowSelection] = React.useState({});
+  const rowSelection = externalRowSelection ?? internalRowSelection;
+  const setRowSelection = onRowSelectionChange ?? setInternalRowSelection;
 
   const table = useReactTable({
     data,

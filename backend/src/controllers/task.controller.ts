@@ -10,9 +10,11 @@ import { workspaceIdSchema } from "../validation/workspace.validation";
 import { Permissions } from "../enums/role.enum";
 import { getMemberRoleInWorkspace } from "../services/member.service";
 import { roleGuard } from "../utils/roleGuard";
+import { BadRequestException } from "../utils/appError";
 import {
   createTaskService,
   deleteTaskService,
+  bulkDeleteTasksService,
   getAllTasksService,
   getTaskByIdService,
   updateTaskService,
@@ -91,6 +93,10 @@ export const getAllTasksController = asyncHandler(
         : undefined,
       keyword: req.query.keyword as string | undefined,
       dueDate: req.query.dueDate as string | undefined,
+      createdFrom: req.query.createdFrom as string | undefined,
+      createdTo: req.query.createdTo as string | undefined,
+      dueFrom: req.query.dueFrom as string | undefined,
+      dueTo: req.query.dueTo as string | undefined,
     };
 
     const pagination = {
@@ -144,6 +150,29 @@ export const deleteTaskController = asyncHandler(
 
     return res.status(HTTPSTATUS.OK).json({
       message: "Task deleted successfully",
+    });
+  }
+);
+
+export const bulkDeleteTasksController = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user?._id;
+    const workspaceId = workspaceIdSchema.parse(req.params.workspaceId);
+    
+    const { taskIds } = req.body;
+    
+    if (!Array.isArray(taskIds) || taskIds.length === 0) {
+      throw new BadRequestException("taskIds must be a non-empty array");
+    }
+
+    const { role } = await getMemberRoleInWorkspace(userId, workspaceId);
+    roleGuard(role, [Permissions.DELETE_TASK]);
+
+    const result = await bulkDeleteTasksService(workspaceId, taskIds);
+
+    return res.status(HTTPSTATUS.OK).json({
+      message: `Successfully deleted ${result.deletedCount} tasks`,
+      ...result,
     });
   }
 );

@@ -4,13 +4,14 @@ import { DataTable } from "./table/table";
 import { useParams } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { X } from "lucide-react";
+import { X, Trash2 } from "lucide-react";
 import { DataTableFacetedFilter } from "./table/table-faceted-filter";
+import { DateRangeFilter } from "./table/date-range-filter";
 import { priorities, statuses } from "./table/data";
 import useTaskTableFilter from "@/hooks/use-task-table-filter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import useWorkspaceId from "@/hooks/use-workspace-id";
-import { getAllTasksQueryFn } from "@/lib/api";
+import { getAllTasksQueryFn, bulkDeleteTasksMutationFn } from "@/lib/api";
 import API from "@/lib/axios-client";
 import { TaskType } from "@/types/api.type";
 import useGetProjectsInWorkspaceQuery from "@/hooks/api/use-get-projects";
@@ -28,6 +29,10 @@ interface DataTableFilterToolbarProps {
   projectId?: string;
   filters: Filters;
   setFilters: SetFilters;
+  selectedTaskIds?: string[];
+  onBulkDelete?: () => void;
+  totalTasks?: number;
+  isBulkDeleting?: boolean;
 }
 
 const TaskTable = () => {
@@ -39,6 +44,7 @@ const TaskTable = () => {
   const [selectedTask, setSelectedTask] = useState<TaskType | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [_isLoadingTaskDetails, setIsLoadingTaskDetails] = useState(false);
+  const [rowSelection, setRowSelection] = useState({});
 
   const [filters, setFilters] = useTaskTableFilter();
   const workspaceId = useWorkspaceId();
@@ -103,7 +109,13 @@ const TaskTable = () => {
 
   // Handle task update
   const updateTaskMutation = useMutation({
-    mutationFn: async ({ taskId, updates }: { taskId: string; updates: any }) => {
+    mutationFn: async ({
+      taskId,
+      updates,
+    }: {
+      taskId: string;
+      updates: any;
+    }) => {
       const response = await API.put(
         `task/${taskId}/project/${selectedTask?.project._id}/workspace/${workspaceId}/update`,
         updates
@@ -130,6 +142,39 @@ const TaskTable = () => {
     },
   });
 
+  // Bulk delete mutation
+  const bulkDeleteMutation = useMutation({
+    mutationFn: (taskIds: string[]) =>
+      bulkDeleteTasksMutationFn({ workspaceId, taskIds }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["all-tasks"] });
+      setRowSelection({});
+      toast({
+        title: "Success",
+        description: data.message,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete tasks",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Get selected task IDs from row selection
+  const selectedTaskIds = Object.keys(rowSelection)
+    .filter((key) => rowSelection[key as keyof typeof rowSelection])
+    .map((index) => tasks[parseInt(index)]?._id)
+    .filter(Boolean);
+
+  // Handle bulk delete
+  const handleBulkDelete = () => {
+    if (selectedTaskIds.length === 0) return;
+    bulkDeleteMutation.mutate(selectedTaskIds);
+  };
+
   return (
     <div className="w-full relative">
       <DataTable
@@ -143,12 +188,18 @@ const TaskTable = () => {
           pageNumber,
           pageSize,
         }}
+        rowSelection={rowSelection}
+        onRowSelectionChange={setRowSelection}
         filtersToolbar={
           <DataTableFilterToolbar
             isLoading={isLoading}
             projectId={projectId}
             filters={filters}
             setFilters={setFilters}
+            selectedTaskIds={selectedTaskIds}
+            onBulkDelete={handleBulkDelete}
+            totalTasks={tasks.length}
+            isBulkDeleting={bulkDeleteMutation.isPending}
           />
         }
         meta={{
@@ -176,6 +227,9 @@ const DataTableFilterToolbar: FC<DataTableFilterToolbarProps> = ({
   projectId,
   filters,
   setFilters,
+  selectedTaskIds = [],
+  onBulkDelete,
+  isBulkDeleting = false,
 }) => {
   const workspaceId = useWorkspaceId();
 
@@ -229,79 +283,124 @@ const DataTableFilterToolbar: FC<DataTableFilterToolbarProps> = ({
   };
 
   return (
-    <div className="flex flex-col lg:flex-row w-full items-start space-y-2 mb-2 lg:mb-0 lg:space-x-2  lg:space-y-0">
-      <Input
-        placeholder="Filter tasks..."
-        value={filters.keyword || ""}
-        onChange={(e) =>
-          setFilters({
-            keyword: e.target.value,
-          })
-        }
-        className="h-8 w-full lg:w-[250px]"
-      />
-      {/* Status filter */}
-      <DataTableFacetedFilter
-        title="Status"
-        multiSelect={true}
-        options={statuses}
-        disabled={isLoading}
-        selectedValues={filters.status?.split(",") || []}
-        onFilterChange={(values) => handleFilterChange("status", values)}
-      />
-
-      {/* Priority filter */}
-      <DataTableFacetedFilter
-        title="Priority"
-        multiSelect={true}
-        options={priorities}
-        disabled={isLoading}
-        selectedValues={filters.priority?.split(",") || []}
-        onFilterChange={(values) => handleFilterChange("priority", values)}
-      />
-
-      {/* Assigned To filter */}
-      <DataTableFacetedFilter
-        title="Assigned To"
-        multiSelect={true}
-        options={assigneesOptions}
-        disabled={isLoading}
-        selectedValues={filters.assigneeId?.split(",") || []}
-        onFilterChange={(values) => handleFilterChange("assigneeId", values)}
-      />
-
-      {!projectId && (
-        <DataTableFacetedFilter
-          title="Projects"
-          multiSelect={false}
-          options={projectOptions}
-          disabled={isLoading}
-          selectedValues={filters.projectId?.split(",") || []}
-          onFilterChange={(values) => handleFilterChange("projectId", values)}
-        />
+    <div className="space-y-4">
+      {/* Bulk Actions */}
+      {selectedTaskIds.length > 0 && (
+        <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+          <div className="flex items-center space-x-2">
+            <span className="text-sm font-medium">
+              {selectedTaskIds.length} task(s) selected
+            </span>
+          </div>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={onBulkDelete}
+            disabled={isBulkDeleting}
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            {isBulkDeleting ? "Deleting..." : "Delete Selected"}
+          </Button>
+        </div>
       )}
 
-      {Object.values(filters).some(
-        (value) => value !== null && value !== ""
-      ) && (
-        <Button
-          disabled={isLoading}
-          variant="ghost"
-          className="h-8 px-2 lg:px-3"
-          onClick={() =>
+      {/* Filters */}
+      <div className="flex flex-col lg:flex-row w-full items-start space-y-2 mb-2 lg:mb-0 lg:space-x-2  lg:space-y-0">
+        <Input
+          placeholder="Filter tasks..."
+          value={filters.keyword || ""}
+          onChange={(e) =>
             setFilters({
-              keyword: null,
-              status: null,
-              priority: null,
-              projectId: null,
-              assigneeId: null,
+              keyword: e.target.value,
             })
           }
-        >
-          Reset
-          <X />
-        </Button>
-      )}
+          className="h-8 w-full lg:w-[250px]"
+        />
+        {/* Status filter */}
+        <DataTableFacetedFilter
+          title="Status"
+          multiSelect={true}
+          options={statuses}
+          disabled={isLoading}
+          selectedValues={filters.status?.split(",") || []}
+          onFilterChange={(values) => handleFilterChange("status", values)}
+        />
+
+        {/* Priority filter */}
+        <DataTableFacetedFilter
+          title="Priority"
+          multiSelect={true}
+          options={priorities}
+          disabled={isLoading}
+          selectedValues={filters.priority?.split(",") || []}
+          onFilterChange={(values) => handleFilterChange("priority", values)}
+        />
+
+        {/* Assigned To filter */}
+        <DataTableFacetedFilter
+          title="Assigned To"
+          multiSelect={true}
+          options={assigneesOptions}
+          disabled={isLoading}
+          selectedValues={filters.assigneeId?.split(",") || []}
+          onFilterChange={(values) => handleFilterChange("assigneeId", values)}
+        />
+
+        {!projectId && (
+          <DataTableFacetedFilter
+            title="Projects"
+            multiSelect={false}
+            options={projectOptions}
+            disabled={isLoading}
+            selectedValues={filters.projectId?.split(",") || []}
+            onFilterChange={(values) => handleFilterChange("projectId", values)}
+          />
+        )}
+
+        {/* Created Date Range Filter */}
+        <DateRangeFilter
+          title="Created Date"
+          fromValue={filters.createdFrom || undefined}
+          toValue={filters.createdTo || undefined}
+          onFromChange={(value) => setFilters({ createdFrom: value })}
+          onToChange={(value) => setFilters({ createdTo: value })}
+        />
+
+        {/* Due Date Range Filter */}
+        <DateRangeFilter
+          title="Due Date"
+          fromValue={filters.dueFrom || undefined}
+          toValue={filters.dueTo || undefined}
+          onFromChange={(value) => setFilters({ dueFrom: value })}
+          onToChange={(value) => setFilters({ dueTo: value })}
+        />
+
+        {Object.values(filters).some(
+          (value) => value !== null && value !== ""
+        ) && (
+          <Button
+            disabled={isLoading}
+            variant="ghost"
+            className="h-8 px-2 lg:px-3"
+            onClick={() =>
+              setFilters({
+                keyword: null,
+                status: null,
+                priority: null,
+                projectId: null,
+                assigneeId: null,
+                createdFrom: null,
+                createdTo: null,
+                dueFrom: null,
+                dueTo: null,
+              })
+            }
+          >
+            Reset
+            <X />
+          </Button>
+        )}
+      </div>
     </div>
   );
 };

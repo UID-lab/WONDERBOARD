@@ -130,6 +130,22 @@ export type AnalyticsResponseType = {
     totalTasks: number;
     overdueTasks: number;
     completedTasks: number;
+    inProgressTasks: number;
+    todoTasks: number;
+    totalProjects: number;
+    totalMembers: number;
+    taskCompletionTrend: Array<{
+      _id: string;
+      count: number;
+    }>;
+    taskPriorityDistribution: Array<{
+      _id: string;
+      count: number;
+    }>;
+    projectTaskDistribution: Array<{
+      _id: string;
+      count: number;
+    }>;
   };
 };
 
