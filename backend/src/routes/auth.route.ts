@@ -17,12 +17,19 @@ authRoutes.post("/login", loginController);
 
 authRoutes.post("/logout", logOutController);
 
-authRoutes.get(
-  "/google",
-  passport.authenticate("google", {
+authRoutes.get("/google", (req, res, next) => {
+  // Pass the state parameter to preserve returnUrl/invite info
+  const state = req.query.state as string;
+  const authenticateOptions: any = {
     scope: ["profile", "email"],
-  })
-);
+  };
+
+  if (state) {
+    authenticateOptions.state = state;
+  }
+
+  passport.authenticate("google", authenticateOptions)(req, res, next);
+});
 
 authRoutes.get(
   "/google/callback",

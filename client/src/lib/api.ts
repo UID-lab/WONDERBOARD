@@ -227,6 +227,10 @@ export const getAllTasksQueryFn = async ({
   priority,
   status,
   dueDate,
+  createdFrom,
+  createdTo,
+  dueFrom,
+  dueTo,
   pageNumber,
   pageSize,
 }: AllTaskPayloadType): Promise<AllTaskResponseType> => {
@@ -239,6 +243,10 @@ export const getAllTasksQueryFn = async ({
   if (priority) queryParams.append("priority", priority);
   if (status) queryParams.append("status", status);
   if (dueDate) queryParams.append("dueDate", dueDate);
+  if (createdFrom) queryParams.append("createdFrom", createdFrom);
+  if (createdTo) queryParams.append("createdTo", createdTo);
+  if (dueFrom) queryParams.append("dueFrom", dueFrom);
+  if (dueTo) queryParams.append("dueTo", dueTo);
   if (pageNumber) queryParams.append("pageNumber", pageNumber?.toString());
   if (pageSize) queryParams.append("pageSize", pageSize?.toString());
 

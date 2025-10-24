@@ -2,6 +2,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
 import { DataTableFacetedFilter } from "../task/table/table-faceted-filter";
+import { DateRangeFilter } from "../task/table/date-range-filter";
 import { priorities, statuses } from "../task/table/data";
 import useGetProjectsInWorkspaceQuery from "@/hooks/api/use-get-projects";
 import useGetWorkspaceMembers from "@/hooks/api/use-get-workspace-members";
@@ -64,6 +65,10 @@ const BoardFilters = ({ filters, setFilters }: BoardFiltersProps) => {
       assigneeId: null,
       priority: null,
       status: null,
+      createdFrom: null,
+      createdTo: null,
+      dueFrom: null,
+      dueTo: null,
     });
   };
 
@@ -122,6 +127,25 @@ const BoardFilters = ({ filters, setFilters }: BoardFiltersProps) => {
           }
         />
       )}
+
+      {/* Date Range Filters - Can be used simultaneously */}
+      <div className="flex flex-wrap gap-2">
+        <DateRangeFilter
+          title="Created Date"
+          fromValue={filters.createdFrom || undefined}
+          toValue={filters.createdTo || undefined}
+          onFromChange={(value) => setFilters({ createdFrom: value })}
+          onToChange={(value) => setFilters({ createdTo: value })}
+        />
+
+        <DateRangeFilter
+          title="Due Date"
+          fromValue={filters.dueFrom || undefined}
+          toValue={filters.dueTo || undefined}
+          onFromChange={(value) => setFilters({ dueFrom: value })}
+          onToChange={(value) => setFilters({ dueTo: value })}
+        />
+      </div>
 
       {/* Reset Filters */}
       {isFiltered && (

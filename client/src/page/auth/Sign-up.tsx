@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -28,6 +28,8 @@ import { Loader } from "lucide-react";
 
 const SignUp = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const returnUrl = searchParams.get("returnUrl");
 
   const { mutate, isPending } = useMutation({
     mutationFn: registerMutationFn,
@@ -55,9 +57,28 @@ const SignUp = () => {
 
   const onSubmit = (values: z.infer<typeof formSchema>) => {
     if (isPending) return;
-    mutate(values, {
+    
+    // Extract invite code from returnUrl if present
+    let inviteCode: string | undefined;
+    if (returnUrl) {
+      console.log('🔍 Return URL found:', returnUrl);
+      const match = returnUrl.match(/\/invite\/workspace\/([^\/]+)\/join/);
+      if (match) {
+        inviteCode = match[1];
+        console.log('🎫 Extracted invite code:', inviteCode);
+      } else {
+        console.log('❌ No invite code found in return URL');
+      }
+    } else {
+      console.log('⏭️ No return URL provided');
+    }
+    
+    console.log('📝 Signup payload:', { ...values, inviteCode });
+    
+    mutate({ ...values, inviteCode }, {
       onSuccess: () => {
-        navigate("/");
+        const decodedUrl = returnUrl ? decodeURIComponent(returnUrl) : null;
+        navigate(decodedUrl || "/");
       },
       onError: (error) => {
         console.log(error);

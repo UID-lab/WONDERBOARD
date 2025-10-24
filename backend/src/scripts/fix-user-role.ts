@@ -13,7 +13,7 @@ const fixUserRole = async () => {
   try {
     await connectDatabase();
 
-    const userId = "68f8bd62f6f345a0dcfe9638";
+    const userId = "68fb3b6d5eb92e3a57ded5c9";
     const targetWorkspaceId = "68f8b4cdf6f345a0dcfe92fe"; // The workspace they should join as MEMBER
 
     // Check all roles first

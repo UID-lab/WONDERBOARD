@@ -68,6 +68,10 @@ const TaskTable = () => {
         status: filters.status,
         projectId: projectId || filters.projectId,
         assignedTo: filters.assigneeId,
+        createdFrom: filters.createdFrom,
+        createdTo: filters.createdTo,
+        dueFrom: filters.dueFrom,
+        dueTo: filters.dueTo,
         pageNumber,
         pageSize,
       }),
@@ -357,23 +361,24 @@ const DataTableFilterToolbar: FC<DataTableFilterToolbarProps> = ({
           />
         )}
 
-        {/* Created Date Range Filter */}
-        <DateRangeFilter
-          title="Created Date"
-          fromValue={filters.createdFrom || undefined}
-          toValue={filters.createdTo || undefined}
-          onFromChange={(value) => setFilters({ createdFrom: value })}
-          onToChange={(value) => setFilters({ createdTo: value })}
-        />
+        {/* Date Range Filters - Can be used simultaneously */}
+        <div className="flex flex-wrap gap-2">
+          <DateRangeFilter
+            title="Created Date"
+            fromValue={filters.createdFrom || undefined}
+            toValue={filters.createdTo || undefined}
+            onFromChange={(value) => setFilters({ createdFrom: value })}
+            onToChange={(value) => setFilters({ createdTo: value })}
+          />
 
-        {/* Due Date Range Filter */}
-        <DateRangeFilter
-          title="Due Date"
-          fromValue={filters.dueFrom || undefined}
-          toValue={filters.dueTo || undefined}
-          onFromChange={(value) => setFilters({ dueFrom: value })}
-          onToChange={(value) => setFilters({ dueTo: value })}
-        />
+          <DateRangeFilter
+            title="Due Date"
+            fromValue={filters.dueFrom || undefined}
+            toValue={filters.dueTo || undefined}
+            onFromChange={(value) => setFilters({ dueFrom: value })}
+            onToChange={(value) => setFilters({ dueTo: value })}
+          />
+        </div>
 
         {Object.values(filters).some(
           (value) => value !== null && value !== ""

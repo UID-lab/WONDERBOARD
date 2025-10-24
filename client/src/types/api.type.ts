@@ -17,6 +17,7 @@ export type registerType = {
   name: string;
   email: string;
   password: string;
+  inviteCode?: string;
 };
 
 // USER TYPE
@@ -290,6 +291,10 @@ export type AllTaskPayloadType = {
   status?: TaskStatusEnumType | null;
   assignedTo?: string | null;
   dueDate?: string | null;
+  createdFrom?: string | null;
+  createdTo?: string | null;
+  dueFrom?: string | null;
+  dueTo?: string | null;
   pageNumber?: number | null;
   pageSize?: number | null;
 };

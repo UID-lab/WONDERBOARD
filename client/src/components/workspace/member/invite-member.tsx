@@ -39,7 +39,7 @@ const InviteMember = () => {
         Invite members to join you
       </h5>
       <p className="text-sm text-muted-foreground leading-tight">
-        Anyone with an invite link can join this free Workspace. You can also
+        Anyone with an invite link can join this Workspace. You can also
         disable and create a new invite link for this Workspace at any time.
       </p>
 

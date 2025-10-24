@@ -12,14 +12,51 @@ import {
 import MemberModel from "../models/member.model";
 import { ProviderEnum } from "../enums/account-provider.enum";
 
+// Helper function to create user's own workspace
+const createOwnWorkspace = async (user: any, session: any) => {
+  const workspace = new WorkspaceModel({
+    name: `My Workspace`,
+    description: `Workspace created for ${user.name}`,
+    owner: user._id,
+  });
+  await workspace.save({ session });
+
+  const ownerRole = await RoleModel.findOne({
+    name: Roles.OWNER,
+  }).session(session);
+
+  if (!ownerRole) {
+    throw new NotFoundException("Owner role not found");
+  }
+
+  const member = new MemberModel({
+    userId: user._id,
+    workspaceId: workspace._id,
+    role: ownerRole._id,
+    joinedAt: new Date(),
+  });
+  await member.save({ session });
+
+  user.currentWorkspace = workspace._id as mongoose.Types.ObjectId;
+  await user.save({ session });
+  
+  console.log('✅ User created as OWNER of new workspace');
+};
+
 export const loginOrCreateAccountService = async (data: {
   provider: string;
   displayName: string;
   providerId: string;
   picture?: string;
   email?: string;
+  inviteCode?: string;
 }) => {
-  const { providerId, provider, displayName, email, picture } = data;
+  const { providerId, provider, displayName, email, picture, inviteCode } = data;
+  
+  console.log('🔍 OAuth login/create account started');
+  console.log('📧 Email:', email);
+  console.log('👤 Name:', displayName);
+  console.log('🎫 Invite code:', inviteCode || 'None provided');
 
   const session = await mongoose.startSession();
 
@@ -45,32 +82,48 @@ export const loginOrCreateAccountService = async (data: {
       });
       await account.save({ session });
 
-      // 3. Create a new workspace for the new user
-      const workspace = new WorkspaceModel({
-        name: `My Workspace`,
-        description: `Workspace created for ${user.name}`,
-        owner: user._id,
-      });
-      await workspace.save({ session });
+      // Handle invite code or create new workspace
+      if (inviteCode) {
+        console.log('🎫 Processing invite code in OAuth:', inviteCode);
+        // User is signing up via invite - join the invited workspace
+        const invitedWorkspace = await WorkspaceModel.findOne({ inviteCode }).session(session);
+        console.log('🏢 Invited workspace found:', invitedWorkspace ? { id: invitedWorkspace._id, name: invitedWorkspace.name } : 'Not found');
+        
+        if (invitedWorkspace) {
+          const memberRole = await RoleModel.findOne({
+            name: Roles.MEMBER,
+          }).session(session);
+          
+          console.log('👥 Member role found:', memberRole ? { id: memberRole._id, name: memberRole.name } : 'Not found');
 
-      const ownerRole = await RoleModel.findOne({
-        name: Roles.OWNER,
-      }).session(session);
+          if (memberRole) {
+            const member = new MemberModel({
+              userId: user._id,
+              workspaceId: invitedWorkspace._id,
+              role: memberRole._id,
+              joinedAt: new Date(),
+            });
+            await member.save({ session });
+            
+            console.log('✅ OAuth user added as MEMBER to invited workspace');
 
-      if (!ownerRole) {
-        throw new NotFoundException("Owner role not found");
+            user.currentWorkspace = invitedWorkspace._id as mongoose.Types.ObjectId;
+            await user.save({ session });
+          } else {
+            console.log('❌ Member role not found, creating own workspace');
+            // Fallback to creating own workspace
+            await createOwnWorkspace(user, session);
+          }
+        } else {
+          console.log('❌ Invited workspace not found, creating own workspace');
+          // Fallback to creating own workspace
+          await createOwnWorkspace(user, session);
+        }
+      } else {
+        console.log('🏗️ No invite code in OAuth - creating new workspace for user');
+        // Normal signup - create a new workspace for the user
+        await createOwnWorkspace(user, session);
       }
-
-      const member = new MemberModel({
-        userId: user._id,
-        workspaceId: workspace._id,
-        role: ownerRole._id,
-        joinedAt: new Date(),
-      });
-      await member.save({ session });
-
-      user.currentWorkspace = workspace._id as mongoose.Types.ObjectId;
-      await user.save({ session });
     }
     await session.commitTransaction();
     session.endSession();
@@ -90,8 +143,14 @@ export const registerUserService = async (body: {
   email: string;
   name: string;
   password: string;
+  inviteCode?: string;
 }) => {
-  const { email, name, password } = body;
+  const { email, name, password, inviteCode } = body;
+  
+  console.log('🔍 User registration started');
+  console.log('📧 Email:', email);
+  console.log('👤 Name:', name);
+  console.log('🎫 Invite code:', inviteCode || 'None provided');
   const session = await mongoose.startSession();
 
   try {
@@ -116,31 +175,72 @@ export const registerUserService = async (body: {
     });
     await account.save({ session });
 
-    // 3. Create a new workspace for the new user
-    const workspace = new WorkspaceModel({
-      name: `My Workspace`,
-      description: `Workspace created for ${user.name}`,
-      owner: user._id,
-    });
-    await workspace.save({ session });
+    let workspaceId: mongoose.Types.ObjectId;
 
-    const ownerRole = await RoleModel.findOne({
-      name: Roles.OWNER,
-    }).session(session);
+    if (inviteCode) {
+      console.log('🎫 Processing invite code:', inviteCode);
+      // User is signing up via invite - join the invited workspace
+      const invitedWorkspace = await WorkspaceModel.findOne({ inviteCode }).session(session);
+      console.log('🏢 Invited workspace found:', invitedWorkspace ? { id: invitedWorkspace._id, name: invitedWorkspace.name } : 'Not found');
+      
+      if (!invitedWorkspace) {
+        throw new NotFoundException("Invalid invite code or workspace not found");
+      }
 
-    if (!ownerRole) {
-      throw new NotFoundException("Owner role not found");
+      const memberRole = await RoleModel.findOne({
+        name: Roles.MEMBER,
+      }).session(session);
+      
+      console.log('👥 Member role found:', memberRole ? { id: memberRole._id, name: memberRole.name } : 'Not found');
+
+      if (!memberRole) {
+        throw new NotFoundException("Member role not found");
+      }
+
+      const member = new MemberModel({
+        userId: user._id,
+        workspaceId: invitedWorkspace._id,
+        role: memberRole._id,
+        joinedAt: new Date(),
+      });
+      await member.save({ session });
+      
+      console.log('✅ User added as MEMBER to invited workspace');
+
+      user.currentWorkspace = invitedWorkspace._id as mongoose.Types.ObjectId;
+      workspaceId = invitedWorkspace._id as mongoose.Types.ObjectId;
+    } else {
+      console.log('🏗️ No invite code - creating new workspace for user');
+      // Normal signup - create a new workspace for the user
+      const workspace = new WorkspaceModel({
+        name: `My Workspace`,
+        description: `Workspace created for ${user.name}`,
+        owner: user._id,
+      });
+      await workspace.save({ session });
+
+      const ownerRole = await RoleModel.findOne({
+        name: Roles.OWNER,
+      }).session(session);
+
+      if (!ownerRole) {
+        throw new NotFoundException("Owner role not found");
+      }
+
+      const member = new MemberModel({
+        userId: user._id,
+        workspaceId: workspace._id,
+        role: ownerRole._id,
+        joinedAt: new Date(),
+      });
+      await member.save({ session });
+
+      user.currentWorkspace = workspace._id as mongoose.Types.ObjectId;
+      workspaceId = workspace._id as mongoose.Types.ObjectId;
+      
+      console.log('✅ User created as OWNER of new workspace');
     }
 
-    const member = new MemberModel({
-      userId: user._id,
-      workspaceId: workspace._id,
-      role: ownerRole._id,
-      joinedAt: new Date(),
-    });
-    await member.save({ session });
-
-    user.currentWorkspace = workspace._id as mongoose.Types.ObjectId;
     await user.save({ session });
 
     await session.commitTransaction();
@@ -149,7 +249,7 @@ export const registerUserService = async (body: {
 
     return {
       userId: user._id,
-      workspaceId: workspace._id,
+      workspaceId: workspaceId,
     };
   } catch (error) {
     await session.abortTransaction();

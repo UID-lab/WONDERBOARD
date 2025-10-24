@@ -1,11 +1,22 @@
 import { baseURL } from "@/lib/base-url";
 import { Button } from "../ui/button";
+import { useSearchParams } from "react-router-dom";
 
 const GoogleOauthButton = (props: { label: string }) => {
   const { label } = props;
+  const [searchParams] = useSearchParams();
+  const returnUrl = searchParams.get("returnUrl");
 
   const handleClick = () => {
-    window.location.href = `${baseURL}/auth/google`;
+    let googleAuthUrl = `${baseURL}/auth/google`;
+    
+    // If there's a returnUrl (which might contain invite code), pass it to OAuth
+    if (returnUrl) {
+      const encodedReturnUrl = encodeURIComponent(returnUrl);
+      googleAuthUrl += `?state=${encodedReturnUrl}`;
+    }
+    
+    window.location.href = googleAuthUrl;
   };
   return (
     <Button

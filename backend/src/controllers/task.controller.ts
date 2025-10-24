@@ -50,6 +50,12 @@ export const updateTaskController = asyncHandler(
   async (req: Request, res: Response) => {
     const userId = req.user?._id;
 
+    console.log("🔍 Update task request received:");
+    console.log("📋 Request body:", JSON.stringify(req.body, null, 2));
+    console.log("🆔 Task ID:", req.params.id);
+    console.log("📁 Project ID:", req.params.projectId);
+    console.log("🏢 Workspace ID:", req.params.workspaceId);
+
     const body = updateTaskSchema.parse(req.body);
 
     const taskId = taskIdSchema.parse(req.params.id);
@@ -98,6 +104,8 @@ export const getAllTasksController = asyncHandler(
       dueFrom: req.query.dueFrom as string | undefined,
       dueTo: req.query.dueTo as string | undefined,
     };
+
+    console.log('📋 Received task filters:', filters);
 
     const pagination = {
       pageSize: parseInt(req.query.pageSize as string) || 10,

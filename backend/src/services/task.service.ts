@@ -2,8 +2,10 @@ import { TaskPriorityEnum, TaskStatusEnum } from "../enums/task.enum";
 import MemberModel from "../models/member.model";
 import ProjectModel from "../models/project.model";
 import TaskModel from "../models/task.model";
+import UserModel from "../models/user.model";
 import ActivityModel, { ActivityType } from "../models/activity.model";
 import { BadRequestException, NotFoundException } from "../utils/appError";
+import { sendTaskAssignmentEmail } from "./email.service";
 
 export const createTaskService = async (
   workspaceId: string,
@@ -50,6 +52,54 @@ export const createTaskService = async (
   });
 
   await task.save();
+
+  // Send email notification asynchronously (don't wait for it)
+  if (assignedTo) {
+    console.log('🔍 Task assigned to:', assignedTo);
+    // Send email in background without blocking task creation
+    setImmediate(async () => {
+      try {
+        const assignee = await UserModel.findById(assignedTo);
+        const creator = await UserModel.findById(userId);
+        
+        console.log('👤 Assignee found:', assignee ? { id: assignee._id, name: assignee.name, email: assignee.email } : 'Not found');
+        console.log('👤 Creator found:', creator ? { id: creator._id, name: creator.name, email: creator.email } : 'Not found');
+        
+        if (assignee && creator) {
+          const assigneeId = (assignee._id as any).toString();
+          const creatorId = userId.toString();
+          console.log('🔍 Checking if assignee !== creator:', assigneeId, '!==', creatorId, '=', assigneeId !== creatorId);
+          
+          if (assigneeId !== creatorId) {
+            console.log('📧 Sending task assignment email asynchronously...');
+            const emailResult = await sendTaskAssignmentEmail(
+              assignee.email,
+              assignee.name,
+              title,
+              description || '',
+              creator.name,
+              creator.email,
+              workspaceId,
+              (task._id as any).toString()
+            );
+            console.log('📧 Email result:', emailResult);
+            console.log('✅ Email sent successfully');
+          } else {
+            console.log('⏭️ Skipping email - assignee is the same as creator');
+          }
+        } else {
+          console.log('❌ Missing assignee or creator data');
+        }
+      } catch (emailError) {
+        console.error('❌ Failed to send task assignment email:', emailError);
+        if (emailError instanceof Error) {
+          console.error('❌ Email error stack:', emailError.stack);
+        }
+      }
+    });
+  } else {
+    console.log('⏭️ No assignee specified, skipping email notification');
+  }
 
   // Create activity log
   await ActivityModel.create({
@@ -133,6 +183,56 @@ export const updateTaskService = async (
     { new: true }
   );
 
+  // Send email notification asynchronously if assignee changed
+  if (body.assignedTo !== undefined && task.assignedTo?.toString() !== body.assignedTo && body.assignedTo) {
+    console.log('🔍 Task assignee changed to:', body.assignedTo);
+    console.log('🔍 Previous assignee:', task.assignedTo?.toString());
+    
+    // Send email in background without blocking task update
+    setImmediate(async () => {
+      try {
+        const assignee = await UserModel.findById(body.assignedTo);
+        const updater = await UserModel.findById(userId);
+        
+        console.log('👤 New assignee found:', assignee ? { id: assignee._id, name: assignee.name, email: assignee.email } : 'Not found');
+        console.log('👤 Updater found:', updater ? { id: updater._id, name: updater.name, email: updater.email } : 'Not found');
+        
+        if (assignee && updater) {
+          const assigneeId = (assignee._id as any).toString();
+          const updaterId = userId.toString();
+          console.log('🔍 Checking if assignee !== updater:', assigneeId, '!==', updaterId, '=', assigneeId !== updaterId);
+          
+          if (assigneeId !== updaterId) {
+            console.log('📧 Sending task assignment email for updated task asynchronously...');
+            const emailResult = await sendTaskAssignmentEmail(
+              assignee.email,
+              assignee.name,
+              updatedTask?.title || task.title,
+              updatedTask?.description || task.description || '',
+              updater.name,
+              updater.email,
+              workspaceId,
+              (task._id as any).toString()
+            );
+            console.log('📧 Email result:', emailResult);
+            console.log('✅ Email sent successfully');
+          } else {
+            console.log('⏭️ Skipping email - assignee is the same as updater');
+          }
+        } else {
+          console.log('❌ Missing assignee or updater data');
+        }
+      } catch (emailError) {
+        console.error('❌ Failed to send task assignment email:', emailError);
+        if (emailError instanceof Error) {
+          console.error('❌ Email error stack:', emailError.stack);
+        }
+      }
+    });
+  } else {
+    console.log('⏭️ No assignee change detected, skipping email notification');
+  }
+
   if (!updatedTask) {
     throw new BadRequestException("Failed to update task");
   }
@@ -195,7 +295,8 @@ export const getAllTasksService = async (
     query.title = { $regex: filters.keyword, $options: "i" };
   }
 
-  if (filters.dueDate) {
+  // Legacy single due date filter (keeping for backward compatibility)
+  if (filters.dueDate && !filters.dueFrom && !filters.dueTo) {
     query.dueDate = {
       $eq: new Date(filters.dueDate),
     };
@@ -203,34 +304,57 @@ export const getAllTasksService = async (
 
   // Date range filters for created date
   if (filters.createdFrom || filters.createdTo) {
+    console.log('📅 Created date filters:', { createdFrom: filters.createdFrom, createdTo: filters.createdTo });
     query.createdAt = {};
     if (filters.createdFrom) {
-      query.createdAt.$gte = new Date(filters.createdFrom);
+      const fromDate = new Date(filters.createdFrom);
+      fromDate.setHours(0, 0, 0, 0); // Start of day
+      console.log('📅 Created from date parsed:', fromDate, 'isValid:', !isNaN(fromDate.getTime()));
+      if (!isNaN(fromDate.getTime())) {
+        query.createdAt.$gte = fromDate;
+      }
     }
     if (filters.createdTo) {
       const toDate = new Date(filters.createdTo);
       toDate.setHours(23, 59, 59, 999); // End of day
-      query.createdAt.$lte = toDate;
+      console.log('📅 Created to date parsed:', toDate, 'isValid:', !isNaN(toDate.getTime()));
+      if (!isNaN(toDate.getTime())) {
+        query.createdAt.$lte = toDate;
+      }
     }
+    console.log('📅 Created date query:', query.createdAt);
   }
 
   // Date range filters for due date
   if (filters.dueFrom || filters.dueTo) {
+    console.log('📅 Due date filters:', { dueFrom: filters.dueFrom, dueTo: filters.dueTo });
     query.dueDate = {};
     if (filters.dueFrom) {
-      query.dueDate.$gte = new Date(filters.dueFrom);
+      const fromDate = new Date(filters.dueFrom);
+      fromDate.setHours(0, 0, 0, 0); // Start of day
+      console.log('📅 Due from date parsed:', fromDate, 'isValid:', !isNaN(fromDate.getTime()));
+      if (!isNaN(fromDate.getTime())) {
+        query.dueDate.$gte = fromDate;
+      }
     }
     if (filters.dueTo) {
       const toDate = new Date(filters.dueTo);
       toDate.setHours(23, 59, 59, 999); // End of day
-      query.dueDate.$lte = toDate;
+      console.log('📅 Due to date parsed:', toDate, 'isValid:', !isNaN(toDate.getTime()));
+      if (!isNaN(toDate.getTime())) {
+        query.dueDate.$lte = toDate;
+      }
     }
+    console.log('📅 Due date query:', query.dueDate);
   }
+
+  console.log('🔍 Final MongoDB query:', JSON.stringify(query, null, 2));
 
   //Pagination Setup
   const { pageSize, pageNumber } = pagination;
   const skip = (pageNumber - 1) * pageSize;
 
+  console.log('🔍 Executing MongoDB query with filters...');
   const [tasks, totalCount] = await Promise.all([
     TaskModel.find(query)
       .skip(skip)
@@ -241,6 +365,8 @@ export const getAllTasksService = async (
       .select("+description"), // Ensure description is included
     TaskModel.countDocuments(query),
   ]);
+
+  console.log(`📊 Found ${totalCount} tasks matching filters, returning ${tasks.length} tasks for page ${pagination.pageNumber}`);
 
   const totalPages = Math.ceil(totalCount / pageSize);
 

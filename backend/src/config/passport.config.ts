@@ -33,6 +33,23 @@ passport.use(
           throw new NotFoundException("Google ID (sub) is missing");
         }
 
+        // Extract invite code from state parameter
+        let inviteCode: string | undefined;
+        const state = req.query.state as string;
+        if (state) {
+          try {
+            const decodedState = decodeURIComponent(state);
+            console.log("🔍 Decoded state:", decodedState);
+            const match = decodedState.match(/\/invite\/workspace\/([^\/]+)\/join/);
+            if (match) {
+              inviteCode = match[1];
+              console.log("🎫 Extracted invite code from OAuth:", inviteCode);
+            }
+          } catch (error) {
+            console.log("❌ Error parsing state parameter:", error);
+          }
+        }
+
         console.log("🔄 Calling loginOrCreateAccountService...");
         const { user } = await loginOrCreateAccountService({
           provider: ProviderEnum.GOOGLE,
@@ -40,6 +57,7 @@ passport.use(
           providerId: googleId,
           picture: picture,
           email: email,
+          inviteCode: inviteCode,
         });
         
         console.log("✅ User authenticated:", JSON.stringify(user, null, 2));

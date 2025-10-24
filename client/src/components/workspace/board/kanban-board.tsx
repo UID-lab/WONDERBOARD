@@ -14,7 +14,7 @@ import { SortableContext } from "@dnd-kit/sortable";
 import { createPortal } from "react-dom";
 
 import { TaskType } from "@/types/api.type";
-import { TaskStatusEnumType } from "@/constant";
+import { TaskStatusEnumType, TaskStatusEnum } from "@/constant";
 import { getAllTasksQueryFn, editTaskMutationFn } from "@/lib/api";
 import useWorkspaceId from "@/hooks/use-workspace-id";
 import useTaskTableFilter from "@/hooks/use-task-table-filter";
@@ -47,6 +47,10 @@ const KanbanBoard = () => {
       filters.assigneeId,
       filters.priority,
       filters.status,
+      filters.createdFrom,
+      filters.createdTo,
+      filters.dueFrom,
+      filters.dueTo,
     ],
     queryFn: () =>
       getAllTasksQueryFn({
@@ -56,7 +60,10 @@ const KanbanBoard = () => {
         assignedTo: filters.assigneeId,
         priority: filters.priority,
         status: filters.status,
-        dueDate: "", // dueDate - not available in current filter
+        createdFrom: filters.createdFrom,
+        createdTo: filters.createdTo,
+        dueFrom: filters.dueFrom,
+        dueTo: filters.dueTo,
         pageNumber: 1,
         pageSize: 1000,
       }),
@@ -70,11 +77,11 @@ const KanbanBoard = () => {
       await queryClient.cancelQueries({ queryKey: ["board-tasks"] });
 
       // Snapshot the previous value
-      const previousTasks = queryClient.getQueryData(["board-tasks", workspaceId, filters.keyword, filters.projectId, filters.assigneeId, filters.priority, filters.status]);
+      const previousTasks = queryClient.getQueryData(["board-tasks", workspaceId, filters.keyword, filters.projectId, filters.assigneeId, filters.priority, filters.status, filters.createdFrom, filters.createdTo, filters.dueFrom, filters.dueTo]);
 
       // Optimistically update to the new value
       queryClient.setQueryData(
-        ["board-tasks", workspaceId, filters.keyword, filters.projectId, filters.assigneeId, filters.priority, filters.status],
+        ["board-tasks", workspaceId, filters.keyword, filters.projectId, filters.assigneeId, filters.priority, filters.status, filters.createdFrom, filters.createdTo, filters.dueFrom, filters.dueTo],
         (old: any) => {
           if (!old?.tasks) return old;
           
@@ -96,7 +103,7 @@ const KanbanBoard = () => {
       // If the mutation fails, use the context returned from onMutate to roll back
       if (context?.previousTasks) {
         queryClient.setQueryData(
-          ["board-tasks", workspaceId, filters.keyword, filters.projectId, filters.assigneeId, filters.priority, filters.status],
+          ["board-tasks", workspaceId, filters.keyword, filters.projectId, filters.assigneeId, filters.priority, filters.status, filters.createdFrom, filters.createdTo, filters.dueFrom, filters.dueTo],
           context.previousTasks
         );
       }
@@ -161,20 +168,61 @@ const KanbanBoard = () => {
     if (!over) return;
 
     const taskId = active.id as string;
-    const newStatus = over.id as TaskStatusEnumType;
+    let potentialStatus = over.id as string;
+
+    console.log("🔍 Drag and drop debug:", {
+      activeId: active.id,
+      overId: over.id,
+      taskId,
+      potentialStatus,
+      overIdType: typeof over.id,
+      activeIdType: typeof active.id,
+    });
+
+    // If dropped on a task, find which column that task belongs to
+    const validStatuses = Object.values(TaskStatusEnum);
+    if (!validStatuses.includes(potentialStatus as TaskStatusEnumType)) {
+      // Find the task that was dropped on and get its status
+      const droppedOnTask = tasks.find((t) => t._id === potentialStatus);
+      if (droppedOnTask) {
+        potentialStatus = droppedOnTask.status;
+        console.log("🔄 Dropped on task, using its column status:", potentialStatus);
+      } else {
+        console.log("❌ Invalid drop target:", potentialStatus, "- not a valid status or task");
+        console.log("✅ Valid statuses:", validStatuses);
+        return;
+      }
+    }
+
+    const newStatus = potentialStatus as TaskStatusEnumType;
 
     const task = tasks.find((t) => t._id === taskId);
-    if (!task) return;
+    if (!task) {
+      console.log("❌ Task not found for ID:", taskId);
+      return;
+    }
 
     // If status hasn't changed, do nothing
-    if (task.status === newStatus) return;
+    if (task.status === newStatus) {
+      console.log("⏭️ Status unchanged, skipping update");
+      return;
+    }
 
-    console.log("Updating task:", {
+    console.log("🔄 Updating task:", {
       taskId: task._id,
       projectId: task.project._id,
       workspaceId,
       oldStatus: task.status,
       newStatus,
+    });
+
+    console.log("📤 Mutation payload:", {
+      taskId: task._id,
+      projectId: task.project._id,
+      workspaceId,
+      data: {
+        status: newStatus,
+      },
     });
 
     // Update task status

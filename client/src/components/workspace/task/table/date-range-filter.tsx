@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CalendarIcon, X } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -40,14 +40,27 @@ export function DateRangeFilter({
     toValue ? new Date(toValue) : undefined
   );
 
+  // Sync local state with props when they change
+  useEffect(() => {
+    setFromDate(fromValue ? new Date(fromValue) : undefined);
+  }, [fromValue]);
+
+  useEffect(() => {
+    setToDate(toValue ? new Date(toValue) : undefined);
+  }, [toValue]);
+
   const handleFromDateSelect = (date: Date | undefined) => {
     setFromDate(date);
-    onFromChange(date ? date.toISOString().split('T')[0] : null);
+    const dateString = date ? date.toISOString().split('T')[0] : null;
+    console.log(`📅 ${title} - From date selected:`, date, '-> formatted:', dateString);
+    onFromChange(dateString);
   };
 
   const handleToDateSelect = (date: Date | undefined) => {
     setToDate(date);
-    onToChange(date ? date.toISOString().split('T')[0] : null);
+    const dateString = date ? date.toISOString().split('T')[0] : null;
+    console.log(`📅 ${title} - To date selected:`, date, '-> formatted:', dateString);
+    onToChange(dateString);
   };
 
   const clearFilters = () => {
@@ -74,7 +87,7 @@ export function DateRangeFilter({
           {title}
           {hasActiveFilters && (
             <Badge variant="secondary" className="ml-2 rounded-sm px-1 font-normal">
-              {[fromValue, toValue].filter(Boolean).length}
+              {fromValue && toValue ? 'Range' : fromValue ? 'From' : 'To'}
             </Badge>
           )}
         </Button>
