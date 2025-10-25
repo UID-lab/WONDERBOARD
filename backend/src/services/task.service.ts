@@ -5,7 +5,7 @@ import TaskModel from "../models/task.model";
 import UserModel from "../models/user.model";
 import ActivityModel, { ActivityType } from "../models/activity.model";
 import { BadRequestException, NotFoundException } from "../utils/appError";
-import { sendTaskAssignmentEmail } from "./email.service";
+import { sendTaskAssignmentEmail, sendTaskReassignmentEmail } from "./email.service";
 
 export const createTaskService = async (
   workspaceId: string,
@@ -203,8 +203,8 @@ export const updateTaskService = async (
           console.log('🔍 Checking if assignee !== updater:', assigneeId, '!==', updaterId, '=', assigneeId !== updaterId);
           
           if (assigneeId !== updaterId) {
-            console.log('📧 Sending task assignment email for updated task asynchronously...');
-            const emailResult = await sendTaskAssignmentEmail(
+            console.log('📧 Sending task reassignment email asynchronously...');
+            const emailResult = await sendTaskReassignmentEmail(
               assignee.email,
               assignee.name,
               updatedTask?.title || task.title,
@@ -215,7 +215,7 @@ export const updateTaskService = async (
               (task._id as any).toString()
             );
             console.log('📧 Email result:', emailResult);
-            console.log('✅ Email sent successfully');
+            console.log('✅ Reassignment email sent successfully');
           } else {
             console.log('⏭️ Skipping email - assignee is the same as updater');
           }
@@ -223,7 +223,7 @@ export const updateTaskService = async (
           console.log('❌ Missing assignee or updater data');
         }
       } catch (emailError) {
-        console.error('❌ Failed to send task assignment email:', emailError);
+        console.error('❌ Failed to send task reassignment email:', emailError);
         if (emailError instanceof Error) {
           console.error('❌ Email error stack:', emailError.stack);
         }
