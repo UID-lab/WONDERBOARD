@@ -22,16 +22,17 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { MessageCircle, Activity, Save, X, Calendar as CalendarIcon, Settings } from "lucide-react";
+import { MessageCircle, Activity, Save, X, Calendar as CalendarIcon, Settings, Paperclip } from "lucide-react";
 import { TaskType } from "@/types/api.type";
 import { TaskPriorityEnumType, TaskStatusEnumType } from "@/constant";
 import { getAvatarColor, getAvatarFallbackText } from "@/lib/helper";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import { TaskComments } from "./task-comments";
+import { TaskComments, TaskCommentsRef } from "./task-comments";
 import { TaskActivities } from "./task-activities";
 import { TaskSubtasks } from "./task-subtasks";
 import { TaskChecklists } from "./task-checklists";
+import { TaskAttachments } from "./task-attachments";
 import useGetWorkspaceMembers from "@/hooks/api/use-get-workspace-members";
 import useWorkspaceId from "@/hooks/use-workspace-id";
 
@@ -58,7 +59,8 @@ export const TaskDetailModal = ({
   onUpdateTask,
 }: TaskDetailModalProps) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [activeTab, setActiveTab] = useState<"comments" | "activity" | "subtasks" | "checklists">("comments");
+  const [activeTab, setActiveTab] = useState<"comments" | "activity" | "subtasks" | "checklists" | "attachments">("comments");
+  const commentsRef = React.useRef<TaskCommentsRef>(null);
   const workspaceId = useWorkspaceId();
   const { data: memberData } = useGetWorkspaceMembers(workspaceId);
 
@@ -387,11 +389,34 @@ export const TaskDetailModal = ({
                     <Activity className="h-4 w-4 inline mr-1" />
                     Activity
                   </button>
+                  <button
+                    className={`pb-2 px-1 text-sm font-medium border-b-2 transition-colors ${
+                      activeTab === "attachments"
+                        ? "border-blue-500 text-blue-600"
+                        : "border-transparent text-gray-500 hover:text-gray-700"
+                    }`}
+                    onClick={() => setActiveTab("attachments")}
+                  >
+                    <Paperclip className="h-4 w-4 inline mr-1" />
+                    Attachments
+                  </button>
                 </div>
 
                 <div className="h-[350px] overflow-hidden">
                   {activeTab === "comments" ? (
-                    <TaskComments taskId={task._id} />
+                    <TaskComments ref={commentsRef} taskId={task._id} />
+                  ) : activeTab === "attachments" ? (
+                    <ScrollArea className="h-full pr-4">
+                      <TaskAttachments 
+                        taskId={task._id} 
+                        onScrollToComment={(commentId) => {
+                          setActiveTab("comments");
+                          setTimeout(() => {
+                            commentsRef.current?.scrollToComment(commentId);
+                          }, 100);
+                        }}
+                      />
+                    </ScrollArea>
                   ) : (
                     <ScrollArea className="h-full pr-4">
                       <TaskActivities taskId={task._id} />

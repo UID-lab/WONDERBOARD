@@ -1,10 +1,19 @@
 import mongoose, { Document, Schema } from "mongoose";
 
+export interface MediaAttachment {
+  url: string;
+  publicId: string;
+  type: 'image' | 'video' | 'document';
+  filename: string;
+  size: number;
+}
+
 export interface CommentDocument extends Document {
   task: mongoose.Types.ObjectId;
   workspace: mongoose.Types.ObjectId;
   author: mongoose.Types.ObjectId;
   content: string;
+  attachments: MediaAttachment[];
   isEdited: boolean;
   editedAt: Date | null;
   createdAt: Date;
@@ -33,6 +42,29 @@ const commentSchema = new Schema<CommentDocument>(
       required: true,
       trim: true,
     },
+    attachments: [{
+      url: {
+        type: String,
+        required: true,
+      },
+      publicId: {
+        type: String,
+        required: true,
+      },
+      type: {
+        type: String,
+        enum: ['image', 'video', 'document'],
+        required: true,
+      },
+      filename: {
+        type: String,
+        required: true,
+      },
+      size: {
+        type: Number,
+        required: true,
+      },
+    }],
     isEdited: {
       type: Boolean,
       default: false,

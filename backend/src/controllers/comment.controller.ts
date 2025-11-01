@@ -16,6 +16,13 @@ import { z } from "zod";
 
 const commentSchema = z.object({
   content: z.string().min(1, "Comment content is required").trim(),
+  attachments: z.array(z.object({
+    url: z.string(),
+    publicId: z.string(),
+    type: z.enum(['image', 'video', 'document']),
+    filename: z.string(),
+    size: z.number(),
+  })).optional().default([]),
 });
 
 const commentIdSchema = z.string().min(1, "Comment ID is required");
@@ -25,12 +32,12 @@ export const createCommentController = asyncHandler(
     const userId = req.user?._id;
     const taskId = taskIdSchema.parse(req.params.taskId);
     const workspaceId = workspaceIdSchema.parse(req.params.workspaceId);
-    const { content } = commentSchema.parse(req.body);
+    const { content, attachments } = commentSchema.parse(req.body);
 
     const { role } = await getMemberRoleInWorkspace(userId, workspaceId);
     roleGuard(role, [Permissions.VIEW_ONLY]); // Anyone who can view can comment
 
-    const { comment } = await createCommentService(taskId, workspaceId, userId, content);
+    const { comment } = await createCommentService(taskId, workspaceId, userId, content, attachments);
 
     return res.status(HTTPSTATUS.CREATED).json({
       message: "Comment created successfully",
@@ -63,12 +70,12 @@ export const updateCommentController = asyncHandler(
     const commentId = commentIdSchema.parse(req.params.commentId);
     const taskId = taskIdSchema.parse(req.params.taskId);
     const workspaceId = workspaceIdSchema.parse(req.params.workspaceId);
-    const { content } = commentSchema.parse(req.body);
+    const { content, attachments } = commentSchema.parse(req.body);
 
     const { role } = await getMemberRoleInWorkspace(userId, workspaceId);
     roleGuard(role, [Permissions.VIEW_ONLY]);
 
-    const { comment } = await updateCommentService(commentId, taskId, workspaceId, userId, content);
+    const { comment } = await updateCommentService(commentId, taskId, workspaceId, userId, content, attachments);
 
     return res.status(HTTPSTATUS.OK).json({
       message: "Comment updated successfully",

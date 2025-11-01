@@ -308,16 +308,19 @@ export const createCommentMutationFn = async ({
   workspaceId,
   taskId,
   content,
+  attachments = [],
 }: {
   workspaceId: string;
   taskId: string;
   content: string;
+  attachments?: any[];
 }): Promise<{
   message: string;
   comment: any;
 }> => {
   const response = await API.post(`comment/workspace/${workspaceId}/task/${taskId}`, {
     content,
+    attachments,
   });
   return response.data;
 };
@@ -327,18 +330,20 @@ export const updateCommentMutationFn = async ({
   taskId,
   commentId,
   content,
+  attachments,
 }: {
   workspaceId: string;
   taskId: string;
   commentId: string;
   content: string;
+  attachments?: any[];
 }): Promise<{
   message: string;
   comment: any;
 }> => {
   const response = await API.put(
     `comment/${commentId}/workspace/${workspaceId}/task/${taskId}`,
-    { content }
+    { content, attachments }
   );
   return response.data;
 };

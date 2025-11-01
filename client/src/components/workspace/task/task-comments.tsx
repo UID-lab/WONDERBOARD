@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useState, useRef, useImperativeHandle, forwardRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
+import { RichTextEditor, MediaAttachment } from "@/components/ui/rich-text-editor";
+import { MediaDisplay } from "@/components/ui/media-display";
+import { LinkRenderer } from "@/components/ui/link-renderer";
 import { Edit2, Trash2, Send, Save, X } from "lucide-react";
 import { getAvatarColor, getAvatarFallbackText } from "@/lib/helper";
 import { format } from "date-fns";
@@ -20,6 +22,7 @@ import {
 interface Comment {
   _id: string;
   content: string;
+  attachments: MediaAttachment[];
   author: {
     _id: string;
     name: string;
@@ -36,12 +39,36 @@ interface TaskCommentsProps {
   taskId: string;
 }
 
-export const TaskComments = ({ taskId }: TaskCommentsProps) => {
+export interface TaskCommentsRef {
+  scrollToComment: (commentId: string) => void;
+}
+
+export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(({ taskId }, ref) => {
   const [newComment, setNewComment] = useState("");
+  const [newAttachments, setNewAttachments] = useState<MediaAttachment[]>([]);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState("");
+  const [editingAttachments, setEditingAttachments] = useState<MediaAttachment[]>([]);
   const workspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
+  const commentRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+
+  useImperativeHandle(ref, () => ({
+    scrollToComment: (commentId: string) => {
+      const commentElement = commentRefs.current[commentId];
+      if (commentElement) {
+        commentElement.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center' 
+        });
+        // Add highlight effect
+        commentElement.classList.add('ring-2', 'ring-blue-400', 'ring-opacity-50');
+        setTimeout(() => {
+          commentElement.classList.remove('ring-2', 'ring-blue-400', 'ring-opacity-50');
+        }, 2000);
+      }
+    },
+  }));
 
   const { data, isLoading } = useQuery({
     queryKey: ["task-comments", workspaceId, taskId],
@@ -50,10 +77,12 @@ export const TaskComments = ({ taskId }: TaskCommentsProps) => {
   });
 
   const createCommentMutation = useMutation({
-    mutationFn: (content: string) => createCommentMutationFn({ workspaceId, taskId, content }),
+    mutationFn: ({ content, attachments }: { content: string; attachments: MediaAttachment[] }) => 
+      createCommentMutationFn({ workspaceId, taskId, content, attachments }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["task-comments", workspaceId, taskId] });
       setNewComment("");
+      setNewAttachments([]);
       toast({
         title: "Success",
         description: "Comment added successfully",
@@ -69,12 +98,17 @@ export const TaskComments = ({ taskId }: TaskCommentsProps) => {
   });
 
   const updateCommentMutation = useMutation({
-    mutationFn: ({ commentId, content }: { commentId: string; content: string }) =>
-      updateCommentMutationFn({ workspaceId, taskId, commentId, content }),
+    mutationFn: ({ commentId, content, attachments }: { 
+      commentId: string; 
+      content: string; 
+      attachments: MediaAttachment[] 
+    }) =>
+      updateCommentMutationFn({ workspaceId, taskId, commentId, content, attachments }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["task-comments", workspaceId, taskId] });
       setEditingCommentId(null);
       setEditingContent("");
+      setEditingAttachments([]);
       toast({
         title: "Success",
         description: "Comment updated successfully",
@@ -108,26 +142,29 @@ export const TaskComments = ({ taskId }: TaskCommentsProps) => {
   });
 
   const handleSubmitComment = () => {
-    if (!newComment.trim()) return;
-    createCommentMutation.mutate(newComment);
+    if (!newComment.trim() && newAttachments.length === 0) return;
+    createCommentMutation.mutate({ content: newComment, attachments: newAttachments });
   };
 
   const handleEditComment = (comment: Comment) => {
     setEditingCommentId(comment._id);
     setEditingContent(comment.content);
+    setEditingAttachments(comment.attachments || []);
   };
 
   const handleSaveEdit = () => {
-    if (!editingContent.trim() || !editingCommentId) return;
+    if ((!editingContent.trim() && editingAttachments.length === 0) || !editingCommentId) return;
     updateCommentMutation.mutate({
       commentId: editingCommentId,
       content: editingContent,
+      attachments: editingAttachments,
     });
   };
 
   const handleCancelEdit = () => {
     setEditingCommentId(null);
     setEditingContent("");
+    setEditingAttachments([]);
   };
 
   const handleDeleteComment = (commentId: string) => {
@@ -162,7 +199,11 @@ export const TaskComments = ({ taskId }: TaskCommentsProps) => {
               const isEditing = editingCommentId === comment._id;
 
               return (
-                <Card key={comment._id} className="p-3 hover:shadow-sm transition-shadow group">
+                <Card 
+                  key={comment._id} 
+                  ref={(el) => (commentRefs.current[comment._id] = el)}
+                  className="p-3 hover:shadow-sm transition-all duration-200 group"
+                >
                   <div className="flex gap-3">
                     <Avatar className="h-8 w-8 flex-shrink-0">
                       <AvatarImage
@@ -208,10 +249,13 @@ export const TaskComments = ({ taskId }: TaskCommentsProps) => {
 
                       {isEditing ? (
                         <div className="space-y-2 mt-2">
-                          <Textarea
+                          <RichTextEditor
                             value={editingContent}
-                            onChange={(e) => setEditingContent(e.target.value)}
-                            className="min-h-[60px] resize-none text-sm"
+                            onChange={setEditingContent}
+                            attachments={editingAttachments}
+                            onAttachmentsChange={setEditingAttachments}
+                            placeholder="Edit your comment..."
+                            disabled={updateCommentMutation.isPending}
                           />
                           <div className="flex gap-2">
                             <Button
@@ -221,7 +265,7 @@ export const TaskComments = ({ taskId }: TaskCommentsProps) => {
                               className="h-7 px-2 text-xs"
                             >
                               <Save className="h-3 w-3 mr-1" />
-                              Save
+                              {updateCommentMutation.isPending ? "Saving..." : "Save"}
                             </Button>
                             <Button
                               variant="outline"
@@ -235,8 +279,14 @@ export const TaskComments = ({ taskId }: TaskCommentsProps) => {
                           </div>
                         </div>
                       ) : (
-                        <div className="text-sm text-gray-700 whitespace-pre-wrap mt-2 leading-relaxed">
-                          {comment.content}
+                        <div className="mt-2 space-y-2">
+                          <LinkRenderer 
+                            content={comment.content}
+                            className="text-sm text-gray-700"
+                          />
+                          {comment.attachments && comment.attachments.length > 0 && (
+                            <MediaDisplay attachments={comment.attachments} />
+                          )}
                         </div>
                       )}
                     </div>
@@ -251,16 +301,18 @@ export const TaskComments = ({ taskId }: TaskCommentsProps) => {
       {/* Add new comment - Fixed at bottom */}
       <div className="border-t pt-3 bg-white flex-shrink-0">
         <div className="space-y-3">
-          <Textarea
-            placeholder="Write a comment..."
+          <RichTextEditor
             value={newComment}
-            onChange={(e) => setNewComment(e.target.value)}
-            className="min-h-[70px] resize-none text-sm"
+            onChange={setNewComment}
+            attachments={newAttachments}
+            onAttachmentsChange={setNewAttachments}
+            placeholder="Write a comment..."
+            disabled={createCommentMutation.isPending}
           />
           <div className="flex justify-end">
             <Button
               onClick={handleSubmitComment}
-              disabled={!newComment.trim() || createCommentMutation.isPending}
+              disabled={(!newComment.trim() && newAttachments.length === 0) || createCommentMutation.isPending}
               size="sm"
               className="h-8 px-3 text-xs"
             >
@@ -272,4 +324,6 @@ export const TaskComments = ({ taskId }: TaskCommentsProps) => {
       </div>
     </div>
   );
-};
+});
+
+TaskComments.displayName = "TaskComments";

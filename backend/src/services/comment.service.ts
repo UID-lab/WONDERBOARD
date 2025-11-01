@@ -3,11 +3,14 @@ import TaskModel from "../models/task.model";
 import ActivityModel, { ActivityType } from "../models/activity.model";
 import { NotFoundException, BadRequestException } from "../utils/appError";
 
+import { MediaAttachment } from "../models/comment.model";
+
 export const createCommentService = async (
   taskId: string,
   workspaceId: string,
   userId: string,
-  content: string
+  content: string,
+  attachments: MediaAttachment[] = []
 ) => {
   // Verify task exists and belongs to workspace
   const task = await TaskModel.findOne({
@@ -24,6 +27,7 @@ export const createCommentService = async (
     workspace: workspaceId,
     author: userId,
     content,
+    attachments,
   });
 
   await comment.save();
@@ -72,7 +76,8 @@ export const updateCommentService = async (
   taskId: string,
   workspaceId: string,
   userId: string,
-  content: string
+  content: string,
+  attachments?: MediaAttachment[]
 ) => {
   const comment = await CommentModel.findOne({
     _id: commentId,
@@ -86,6 +91,9 @@ export const updateCommentService = async (
   }
 
   comment.content = content;
+  if (attachments !== undefined) {
+    comment.attachments = attachments;
+  }
   comment.isEdited = true;
   comment.editedAt = new Date();
 
